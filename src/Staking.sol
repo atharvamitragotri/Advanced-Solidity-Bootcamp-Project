@@ -6,13 +6,14 @@ import "./StakingToken.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-contract Staking is StakingToken, Roles, ReentrancyGuard {
-    IERC20 public stakingToken;
+contract Staking is Roles, ReentrancyGuard {
+    StakingToken public stakingToken;
 
     uint256 public immutable minStakeAmount = 1 * 10**18;
     uint256 public immutable maxStakeAmount = 1000 * 10**18; 
     uint256 public constant COOLDOWN_PERIOD = 7 days;
     address public immutable feeAddress;
+    address public owner;
 
     // Fee (in basis points)
     uint256 public stakeFee; 
@@ -47,17 +48,23 @@ contract Staking is StakingToken, Roles, ReentrancyGuard {
     constructor( 
     uint256 _stakeFee,
     address _feeAddress,
-    uint256 initialSupply,
-    address _priceFeed
-) StakingToken(initialSupply, _priceFeed) {
+    address payable _stakingToken
+) {
     stakeFee = _stakeFee;
     feeAddress = _feeAddress;
     paused = false;
+    owner = msg.sender;
 
-    // setRole(msg.sender, 0, true);
+    stakingToken = StakingToken(_stakingToken);
+
 }
     
     //modifiers
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only owner can transfer fees");
+        _;
+    }
 
     modifier onlyAdmin() {
         require(hasRole(msg.sender, 0), "Caller is not an admin");
@@ -111,7 +118,6 @@ contract Staking is StakingToken, Roles, ReentrancyGuard {
         uint256 feeAmount = (_amount * stakeFee + 9999) / 10000; 
         feeAccumulated += feeAmount;
         uint256 netAmount = _amount - feeAmount;
-
         require(
             stakingToken.transferFrom(msg.sender, address(this), _amount),
             "Token transfer failed"
@@ -201,11 +207,12 @@ contract Staking is StakingToken, Roles, ReentrancyGuard {
         }
     }
 
+    // @notice Assuming admin checks the amount legitmacy prior to this operation
     function _adminStake(address user, uint256 amount) internal {
         if(amount < minStakeAmount || amount > maxStakeAmount)
         {
             revert InvalidAmount(amount);
-        } 
+        }
 
         Stake storage userStake = stakes[user];
 
@@ -296,7 +303,7 @@ contract Staking is StakingToken, Roles, ReentrancyGuard {
         return feeAccumulated;
     }
 
-    fallback() external payable {
+    fallback() external {
         revert();
     }
 }
